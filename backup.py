@@ -6,6 +6,9 @@
 # See print_usage() below.
 #
 # Modification History:
+# 09/15/2015 - Tom Kerr
+# Remove destination directories during sync that don't exist in source tree.
+#
 # 09/10/2015 - Tom Kerr
 # Created.
 ##############################################################################
@@ -139,9 +142,10 @@ if __name__ == "__main__":
     
     # Sync option.    
     # Iterate over all destination files.  
-    # Delete files that don't exist in the source tree.
+    # Delete files and directories that don't exist in the source tree.
     if sync:
-        for (dirpath, dirnames, filenames) in os.walk(dst_root_abs):
+        # Perform a top-down walk to remove files.
+        for (dirpath, dirnames, filenames) in os.walk(dst_root_abs, True):
             for file in filenames:
                 dfn_abs = os.path.join(dirpath, file)        # destination file absolute path
                 fn_rel = os.path.relpath(dfn_abs, dst_root)  # destination file relative path
@@ -162,7 +166,30 @@ if __name__ == "__main__":
                             if error_halt:
                                 print_counts(copy_count, deleted_count, error_count, dry_run)
                                 sys.exit(3)
-    
+   
+        # Perform a bottom-up walk to remove directories.        
+        for (dirpath, dirnames, filenames) in os.walk(dst_root_abs, False):
+            for dir in dirnames:
+                ddn_abs = os.path.join(dirpath, dir)         # destination directory absolute path
+                dn_rel = os.path.relpath(ddn_abs, dst_root)  # destination directory relative path
+                sdn_abs = os.path.join(src_root_abs, dn_rel) # source directory absolute path
+                if not os.path.exists(sdn_abs):
+                    if (dry_run or verbose):
+                        print("Deleting " + str(ddn_abs))
+                    if dry_run:
+                        deleted_count = deleted_count + 1  # Dry run: fake deleted count
+                    else:
+                        try:
+                            os.rmdir(ddn_abs)
+                            deleted_count = deleted_count + 1
+                            
+                        except (shutil.Error, IOError, OSError, os.error) as err:
+                            print "Error deleting " + str(ddn_abs) + ": " + str(err)
+                            error_count = error_count + 1
+                            if error_halt:
+                                print_counts(copy_count, deleted_count, error_count, dry_run)
+                                sys.exit(3)
+                
     print_counts(copy_count, deleted_count, error_count, dry_run)
     
 # End of file. 
