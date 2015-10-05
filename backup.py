@@ -6,6 +6,9 @@
 # See print_usage() below.
 #
 # Modification History:
+# 09/29/2015 - Tom Kerr
+# Added -x option to exclude files from backup.
+#
 # 09/15/2015 - Tom Kerr
 # Remove destination directories during sync that don't exist in source tree.
 #
@@ -22,26 +25,28 @@ import sys
 # Print usage syntax.
 ##############################################################################
 def print_usage():
-    print "Usage:", sys.argv[0], "[-dfhsv] <src-dir> <dst-dir>"
-    print "  Copy files from <src-dir> to <dst-dir>"
-    print "  <src-dir> and <dst-dir> are directories"
-    print "  -d = Dry run: print what would happen without actually copying"
-    print "  -f = Force copy even if destination file is newer"
-    print "  -h = Halt on copy error (default = skip and keep copying)"
-    print "  -s = Sync: delete files in <dst-dir> that are not in <src-dir>"
-    print "  -v = Verbose printing"
+    print("Usage:", sys.argv[0], "[-dfhsvx] <src-dir> <dst-dir>")
+    print("  Copy files from <src-dir> to <dst-dir>")
+    print("  <src-dir> and <dst-dir> are directories")
+    print("  -d = Dry run: print what would happen without actually copying")
+    print("  -f = Force copy even if destination file is newer")
+    print("  -h = Halt on copy error (default = skip and keep copying)")
+    print("  -s = Sync: delete files in <dst-dir> that are not in <src-dir>")
+    print("  -v = Verbose printing")
+    print("  -x <file> Exclude files listed in <file>")
     sys.exit(2)
 
     
 ##############################################################################
 # Print copy, deleted and error counts.
 ##############################################################################
-def print_counts(copy_count, deleted_count, error_count, dry_run):
+def print_counts(copy_count, deleted_count, excluded_count, error_count, dry_run):
     if dry_run:
         print("Dry run results, no actions actually taken")
-    print("Files copied:  " + str(copy_count))
-    print("Files deleted: " + str(deleted_count))
-    print("Errors:        " + str(error_count))
+    print("Files copied:   " + str(copy_count))
+    print("Files deleted:  " + str(deleted_count))
+    print("Files excluded: " + str(excluded_count))
+    print("Errors:         " + str(error_count))
     
     
 ##############################################################################
@@ -50,18 +55,22 @@ def print_counts(copy_count, deleted_count, error_count, dry_run):
 if __name__ == "__main__":
     
     # Local initialization.
-    copy_count    = 0
-    deleted_count = 0
-    error_count   = 0
-    dry_run       = False
-    error_halt    = False
-    force_copy    = False
-    sync          = False
-    verbose       = False
+    copy_count     = 0
+    deleted_count  = 0
+    excluded_count = 0
+    error_count    = 0
+    dry_run        = False
+    error_halt     = False
+    exclude        = False
+    excludeFile    = None
+    excludeList    = []
+    force_copy     = False
+    sync           = False
+    verbose        = False
         
     # Get command line options and arguments.
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], "dfhsv")
+        (opts, args) = getopt.getopt(sys.argv[1:], "dfhsvx:")
     except getopt.GetoptError as err:
         print str(err)
         print_usage()
@@ -77,6 +86,9 @@ if __name__ == "__main__":
             sync = True
         if (o == "-v"):
             verbose = True
+	if (o == "-x"):
+	    exclude = True
+	    excludeFile = a
         
     # Check argument count.
     if (len(args) < 2):
@@ -85,22 +97,38 @@ if __name__ == "__main__":
     # Get the source and destination paths.
     src_root = args[0]
     if not os.path.exists(src_root):
-        print "Source directory '" + str(src_root) + "' does not exist"
+        print("Source directory '" + str(src_root) + "' does not exist")
         sys.exit(1)
     if not os.path.isdir(src_root):
-        print str(src_root) + " is not a directory"
+        print(str(src_root) + " is not a directory")
         sys.exit(1)
     src_root_abs = os.path.abspath(src_root)
         
     dst_root = args[1]
     if not os.path.exists(dst_root):
-        print "Destination directory '" + str(dst_root) + "' does not exist"
+        print("Destination directory '" + str(dst_root) + "' does not exist")
         sys.exit(1)
     if not os.path.isdir(dst_root):
-        print str(dst_root) + " is not a directory"
+        print(str(dst_root) + " is not a directory")
         sys.exit(1)
     dst_root_abs = os.path.abspath(dst_root)
     
+    # Build the exclude file list.
+    if (exclude):
+        if not os.path.exists(excludeFile):
+	    print("Exclude file '" + str(excludeFile) + "' does not exist")
+            sys.exit(1)
+	try:
+	    f = open(excludeFile, 'r')
+	    for line in f:
+		fn = str(line).split("#")[0].strip()  # Remove comments and trim whitespace
+		if (len(fn)) > 0:
+	            excludeList.append(fn)
+            f.close()
+	except (IOError, OSError, os.error) as err:
+	    print("Error reading " + str(excludeFile) + ": " + str(err))
+	    sys.exit(1)
+
     # Iterate over all source files.  
     # Copy source to destination if criteria met.
     for (dirpath, dirnames, filenames) in os.walk(src_root_abs):
@@ -109,6 +137,19 @@ if __name__ == "__main__":
             fn_rel = os.path.relpath(sfn_abs, src_root)  # source file relative path
             src_mtime = os.path.getmtime(sfn_abs)        # source file modification time
             
+	    # See if this file is in the exclusion list.
+	    if (exclude):
+	        found = False
+	        for f in excludeList:
+		    if (sfn_abs == f):
+		        found = True
+		        excluded_count = excluded_count + 1
+			if (verbose):
+			    print("Excluding " + sfn_abs)
+	                break
+		if (found):
+ 		    continue
+		
             # Check for this file in the destination path.
             dst_mtime = 0
             dfn_abs = os.path.join(dst_root_abs, fn_rel) # destination file absolute path
@@ -134,10 +175,10 @@ if __name__ == "__main__":
                         copy_count = copy_count + 1
                         
                     except (shutil.Error, IOError, OSError, os.error) as err:
-                        print "Error copying " + str(sfn_abs) + ": " + str(err)
+                        print("Error copying " + str(sfn_abs) + ": " + str(err))
                         error_count = error_count + 1
                         if error_halt:
-                            print_counts(copy_count, deleted_count, error_count, dry_run)
+                            print_counts(copy_count, deleted_count, excluded_count, error_count, dry_run)
                             sys.exit(3)
     
     # Sync option.    
@@ -161,10 +202,10 @@ if __name__ == "__main__":
                             deleted_count = deleted_count + 1
                             
                         except (shutil.Error, IOError, OSError, os.error) as err:
-                            print "Error deleting " + str(dfn_abs) + ": " + str(err)
+                            print("Error deleting " + str(dfn_abs) + ": " + str(err))
                             error_count = error_count + 1
                             if error_halt:
-                                print_counts(copy_count, deleted_count, error_count, dry_run)
+                                print_counts(copy_count, deleted_count, excluded_count, error_count, dry_run)
                                 sys.exit(3)
    
         # Perform a bottom-up walk to remove directories.        
@@ -184,12 +225,12 @@ if __name__ == "__main__":
                             deleted_count = deleted_count + 1
                             
                         except (shutil.Error, IOError, OSError, os.error) as err:
-                            print "Error deleting " + str(ddn_abs) + ": " + str(err)
+                            print("Error deleting " + str(ddn_abs) + ": " + str(err))
                             error_count = error_count + 1
                             if error_halt:
-                                print_counts(copy_count, deleted_count, error_count, dry_run)
+                                print_counts(copy_count, deleted_count, excluded_count, error_count, dry_run)
                                 sys.exit(3)
                 
-    print_counts(copy_count, deleted_count, error_count, dry_run)
+    print_counts(copy_count, deleted_count, excluded_count, error_count, dry_run)
     
 # End of file. 
