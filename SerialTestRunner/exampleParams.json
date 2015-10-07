@@ -1,0 +1,16 @@
+{
+    "start" : {
+        "prompt" : "Press a key to start:",
+        "response" : "A",
+        "timeout" : 10
+    },
+    
+    "end" : { "prompt" : "TEST DONE" },
+    
+    "timeout" : 120,
+    
+    "user1" : {
+        "prompt" : "Example user-defined prompt",
+        "response" : "Example user-defined response"
+    }
+}
