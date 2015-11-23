@@ -315,6 +315,8 @@ if __name__ == "__main__":
             break
             
     # Cleanup.
+    if (verbose):
+        sys.stdout.write('\n')
     port.close()
     logFile.close()
     sys.exit(exit_code)
