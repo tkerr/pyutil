@@ -1,4 +1,6 @@
 # Example exclude file for backup.py
-# File contains a list of absolute paths to files to exclude from backup
+# Use absolute paths to files to exclude them from backup
+# Terminate absolute paths with a slash to exclude entire directories from backup
 C:\Users\TKerr\Documents\Misc\BackupMyStuff.log
 C:\Users\TKerr\Documents\Outlook Files\archive.pst  # Spaces in file names OK
+C:\Users\TKerr\Documents\foo\  # Exclude the entire foo directory
